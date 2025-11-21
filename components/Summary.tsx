@@ -2,6 +2,40 @@ import React, { useMemo, useRef, useState } from 'react';
 import { ReceiptData, PersonTotal } from '../types';
 import { PieChart, Wallet, Copy, Download, Check, Calculator, Percent } from 'lucide-react';
 
+// Duplicate color logic to avoid circular dependencies or complex imports
+const USER_COLORS = [
+  { bg: 'bg-red-100 dark:bg-red-500/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-500/30' },
+  { bg: 'bg-orange-100 dark:bg-orange-500/20', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-200 dark:border-orange-500/30' },
+  { bg: 'bg-amber-100 dark:bg-amber-500/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-500/30' },
+  { bg: 'bg-emerald-100 dark:bg-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-500/30' },
+  { bg: 'bg-teal-100 dark:bg-teal-500/20', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-500/30' },
+  { bg: 'bg-cyan-100 dark:bg-cyan-500/20', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-500/30' },
+  { bg: 'bg-blue-100 dark:bg-blue-500/20', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-500/30' },
+  { bg: 'bg-indigo-100 dark:bg-indigo-500/20', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-200 dark:border-indigo-500/30' },
+  { bg: 'bg-violet-100 dark:bg-violet-500/20', text: 'text-violet-700 dark:text-violet-300', border: 'border-violet-200 dark:border-violet-500/30' },
+  { bg: 'bg-fuchsia-100 dark:bg-fuchsia-500/20', text: 'text-fuchsia-700 dark:text-fuchsia-300', border: 'border-fuchsia-200 dark:border-fuchsia-500/30' },
+  { bg: 'bg-pink-100 dark:bg-pink-500/20', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-200 dark:border-pink-500/30' },
+  { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-500/30' },
+];
+
+const getUserColor = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % USER_COLORS.length;
+  return USER_COLORS[index];
+};
+
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
+
 interface SummaryProps {
   data: ReceiptData;
   onUpdateTax: (amount: number) => void;
@@ -171,33 +205,41 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
           </div>
         ) : (
           <div className="space-y-4">
-            {breakdown.people.map((person) => (
-              <div key={person.name} className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:border-purple-200 dark:hover:border-purple-900/50 transition-colors">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-gray-900 dark:text-white text-lg">{person.name}</span>
-                  <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">
-                    {data.currency}{person.finalTotal.toFixed(2)}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-xs mb-3 opacity-80">
-                   <div className="flex flex-col">
-                      <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[10px]">Subtotal</span>
-                      <span className="text-gray-700 dark:text-gray-300">{data.currency}{person.itemsTotal.toFixed(2)}</span>
-                   </div>
-                   <div className="flex flex-col text-right">
-                      <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[10px]">Tax & Tip</span>
-                      <span className="text-gray-700 dark:text-gray-300">{data.currency}{(person.taxShare + person.tipShare).toFixed(2)}</span>
-                   </div>
-                </div>
+            {breakdown.people.map((person) => {
+              const color = getUserColor(person.name);
+              return (
+                <div key={person.name} className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:border-purple-200 dark:hover:border-purple-900/50 transition-colors">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center gap-3">
+                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow-sm ${color.bg} ${color.text} border ${color.border}`}>
+                         {getInitials(person.name)}
+                       </div>
+                       <span className="font-bold text-gray-900 dark:text-white text-lg">{person.name}</span>
+                    </div>
+                    <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">
+                      {data.currency}{person.finalTotal.toFixed(2)}
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-3 opacity-80 pl-[52px]">
+                     <div className="flex flex-col">
+                        <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[10px]">Subtotal</span>
+                        <span className="text-gray-700 dark:text-gray-300">{data.currency}{person.itemsTotal.toFixed(2)}</span>
+                     </div>
+                     <div className="flex flex-col text-right">
+                        <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[10px]">Tax & Tip</span>
+                        <span className="text-gray-700 dark:text-gray-300">{data.currency}{(person.taxShare + person.tipShare).toFixed(2)}</span>
+                     </div>
+                  </div>
 
-                <div className="pt-2 border-t border-gray-200 dark:border-gray-700/50">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">For:</span> {person.items.join(', ')}
-                  </p>
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700/50 pl-[52px]">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">For:</span> {person.items.join(', ')}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

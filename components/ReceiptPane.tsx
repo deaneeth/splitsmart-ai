@@ -2,6 +2,40 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ReceiptItem } from '../types';
 import { User, Users, Receipt, Plus, Pencil, Trash2, Check, X, UserPlus, ImagePlus, Loader2 } from 'lucide-react';
 
+// Color palette for user avatars and tags
+const USER_COLORS = [
+  { bg: 'bg-red-100 dark:bg-red-500/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-500/30' },
+  { bg: 'bg-orange-100 dark:bg-orange-500/20', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-200 dark:border-orange-500/30' },
+  { bg: 'bg-amber-100 dark:bg-amber-500/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-500/30' },
+  { bg: 'bg-emerald-100 dark:bg-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-500/30' },
+  { bg: 'bg-teal-100 dark:bg-teal-500/20', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-500/30' },
+  { bg: 'bg-cyan-100 dark:bg-cyan-500/20', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-500/30' },
+  { bg: 'bg-blue-100 dark:bg-blue-500/20', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-500/30' },
+  { bg: 'bg-indigo-100 dark:bg-indigo-500/20', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-200 dark:border-indigo-500/30' },
+  { bg: 'bg-violet-100 dark:bg-violet-500/20', text: 'text-violet-700 dark:text-violet-300', border: 'border-violet-200 dark:border-violet-500/30' },
+  { bg: 'bg-fuchsia-100 dark:bg-fuchsia-500/20', text: 'text-fuchsia-700 dark:text-fuchsia-300', border: 'border-fuchsia-200 dark:border-fuchsia-500/30' },
+  { bg: 'bg-pink-100 dark:bg-pink-500/20', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-200 dark:border-pink-500/30' },
+  { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-500/30' },
+];
+
+const getUserColor = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % USER_COLORS.length;
+  return USER_COLORS[index];
+};
+
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
+
 interface ReceiptPaneProps {
   items: ReceiptItem[];
   currency: string;
@@ -183,7 +217,7 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                 : assigningId === item.id
                   ? 'border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-400/20 bg-white dark:bg-gray-800 z-20 shadow-lg'
                   : item.assignedTo.length > 0
-                    ? 'border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-900/10 cursor-pointer hover:border-indigo-300'
+                    ? 'border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/30 dark:bg-indigo-900/5 cursor-pointer hover:border-indigo-300'
                     : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer'
             }`}
           >
@@ -284,14 +318,17 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                      </span>
                    ) : (
                      <div className="flex flex-wrap gap-1.5">
-                       {item.assignedTo.map((person, idx) => (
-                         <span
-                           key={idx}
-                           className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
-                         >
-                           {person}
-                         </span>
-                       ))}
+                       {item.assignedTo.map((person, idx) => {
+                         const color = getUserColor(person);
+                         return (
+                           <span
+                             key={idx}
+                             className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${color.bg} ${color.text} ${color.border}`}
+                           >
+                             {person}
+                           </span>
+                         );
+                       })}
                      </div>
                    )}
                    
@@ -320,17 +357,23 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                       {allParticipants.length > 0 ? (
                          allParticipants.map(person => {
                            const isAssigned = item.assignedTo.includes(person);
+                           const color = getUserColor(person);
                            return (
                              <div 
                                key={person}
                                onClick={() => toggleAssignment(item, person)}
                                className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer text-sm transition-all duration-200 ${
                                  isAssigned 
-                                   ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' 
+                                   ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-200' 
                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
                                }`}
                              >
-                               <span className="truncate max-w-[190px]">{person}</span>
+                               <div className="flex items-center">
+                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold mr-2.5 ${color.bg} ${color.text} ring-1 ring-inset ring-black/5 dark:ring-white/5`}>
+                                   {getInitials(person)}
+                                 </div>
+                                 <span className="truncate max-w-[160px]">{person}</span>
+                               </div>
                                {isAssigned && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
                              </div>
                            );
