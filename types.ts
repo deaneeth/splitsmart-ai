@@ -5,6 +5,7 @@ export interface ReceiptItem {
   price: number;
   quantity: number;
   assignedTo: string[]; // List of names sharing this item
+  assignmentWeights?: Record<string, number>; // Map of name -> share count (default 1)
 }
 
 export interface ReceiptData {

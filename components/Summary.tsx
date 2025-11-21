@@ -1,3 +1,4 @@
+
 import React, { useMemo, useRef, useState } from 'react';
 import { ReceiptData, PersonTotal } from '../types';
 import { PieChart, Wallet, Copy, Download, Check, Calculator, Percent } from 'lucide-react';
@@ -51,15 +52,8 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
     const peopleMap = new Map<string, PersonTotal>();
     let unassignedTotal = 0;
 
-    // Initialize assigned people
+    // Initialize assigned people from item list to ensure everyone gets an entry
     data.items.forEach(item => {
-      if (item.assignedTo.length === 0) {
-        unassignedTotal += item.price;
-        return;
-      }
-
-      const costPerPerson = item.price / item.assignedTo.length;
-      
       item.assignedTo.forEach(person => {
         if (!peopleMap.has(person)) {
           peopleMap.set(person, {
@@ -71,9 +65,36 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
             items: []
           });
         }
+      });
+    });
+
+    data.items.forEach(item => {
+      if (item.assignedTo.length === 0) {
+        unassignedTotal += item.price;
+        return;
+      }
+
+      // Calculate total shares for weighted splitting
+      let totalShares = 0;
+      item.assignedTo.forEach(p => {
+        totalShares += (item.assignmentWeights?.[p] || 1);
+      });
+
+      item.assignedTo.forEach(person => {
         const personData = peopleMap.get(person)!;
-        personData.itemsTotal += costPerPerson;
-        personData.items.push(item.name);
+        
+        // Weighted calculation
+        const weight = item.assignmentWeights?.[person] || 1;
+        const ratio = totalShares > 0 ? weight / totalShares : 0;
+        const costForPerson = item.price * ratio;
+        
+        personData.itemsTotal += costForPerson;
+        
+        // Format item name with share info if relevant
+        const shareInfo = (weight > 1 || (totalShares !== item.assignedTo.length)) 
+          ? ` (${weight}/${totalShares})` 
+          : '';
+        personData.items.push(`${item.name}${shareInfo}`);
       });
     });
 
@@ -92,7 +113,11 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
       person.finalTotal = person.itemsTotal + person.taxShare + person.tipShare;
     });
 
-    return { people: peopleArray, unassignedTotal };
+    // Sort by name
+    return { 
+      people: peopleArray.sort((a, b) => a.name.localeCompare(b.name)), 
+      unassignedTotal 
+    };
   }, [data]);
 
   const handleCopySummary = async () => {

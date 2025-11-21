@@ -365,7 +365,9 @@ const App: React.FC = () => {
             if (itemIndex !== -1) {
               newItems[itemIndex] = {
                 ...newItems[itemIndex],
-                assignedTo: update.assignedTo
+                assignedTo: update.assignedTo,
+                // Reset weights when AI overrides assignments to ensure clean slate
+                assignmentWeights: {} 
               };
             }
           });

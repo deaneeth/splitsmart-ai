@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ReceiptItem } from '../types';
-import { User, Users, Receipt, Plus, Pencil, Trash2, Check, X, UserPlus, ImagePlus, Loader2, Camera } from 'lucide-react';
+import { User, Users, Receipt, Plus, Pencil, Trash2, Check, X, UserPlus, ImagePlus, Loader2, Camera, Minus } from 'lucide-react';
 
 // Color palette for user avatars and tags
 const USER_COLORS = [
@@ -123,24 +123,42 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
 
   const toggleAssignment = (item: ReceiptItem, person: string) => {
     const currentAssignments = item.assignedTo;
+    const currentWeights = item.assignmentWeights || {};
     let newAssignments;
+    let newWeights = { ...currentWeights };
     
     if (currentAssignments.includes(person)) {
       newAssignments = currentAssignments.filter(p => p !== person);
+      delete newWeights[person];
     } else {
       newAssignments = [...currentAssignments, person];
+      newWeights[person] = 1;
     }
     
-    onUpdateItem({ ...item, assignedTo: newAssignments });
+    onUpdateItem({ ...item, assignedTo: newAssignments, assignmentWeights: newWeights });
+  };
+
+  const updateWeight = (item: ReceiptItem, person: string, delta: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentWeights = item.assignmentWeights || {};
+    const currentWeight = currentWeights[person] || 1;
+    const newWeight = Math.max(1, currentWeight + delta);
+
+    const newWeights = { ...currentWeights, [person]: newWeight };
+    onUpdateItem({ ...item, assignmentWeights: newWeights });
   };
 
   const handleAddNewAssignee = (item: ReceiptItem) => {
     if (!newAssigneeName.trim()) return;
     const name = newAssigneeName.trim();
     if (!item.assignedTo.includes(name)) {
+      const newWeights = { ...(item.assignmentWeights || {}) };
+      newWeights[name] = 1;
+      
       onUpdateItem({
         ...item,
-        assignedTo: [...item.assignedTo, name]
+        assignedTo: [...item.assignedTo, name],
+        assignmentWeights: newWeights
       });
     }
     setNewAssigneeName('');
@@ -323,12 +341,14 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                      <div className="flex flex-wrap gap-1.5">
                        {item.assignedTo.map((person, idx) => {
                          const color = getUserColor(person);
+                         const weight = item.assignmentWeights?.[person] || 1;
                          return (
                            <span
                              key={idx}
                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${color.bg} ${color.text} ${color.border}`}
                            >
                              {person}
+                             {weight > 1 && <span className="ml-1 opacity-70 text-[10px]">x{weight}</span>}
                            </span>
                          );
                        })}
@@ -354,23 +374,42 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                          allParticipants.map(person => {
                            const isAssigned = item.assignedTo.includes(person);
                            const color = getUserColor(person);
+                           const weight = item.assignmentWeights?.[person] || 1;
+                           
                            return (
                              <div 
                                key={person}
                                onClick={() => toggleAssignment(item, person)}
-                               className={`flex items-center justify-between px-3 py-3 rounded-lg cursor-pointer text-sm transition-all duration-200 ${
+                               className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-all duration-200 ${
                                  isAssigned 
                                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-200' 
                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
                                }`}
                              >
-                               <div className="flex items-center">
-                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold mr-2.5 ${color.bg} ${color.text} ring-1 ring-inset ring-black/5 dark:ring-white/5`}>
+                               <div className="flex items-center flex-1 overflow-hidden">
+                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold mr-2.5 shrink-0 ${color.bg} ${color.text} ring-1 ring-inset ring-black/5 dark:ring-white/5`}>
                                    {getInitials(person)}
                                  </div>
-                                 <span className="truncate max-w-[160px]">{person}</span>
+                                 <span className="truncate mr-2">{person}</span>
                                </div>
-                               {isAssigned && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+                               
+                               {isAssigned && (
+                                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <button 
+                                      onClick={(e) => updateWeight(item, person, -1, e)}
+                                      className="p-1 hover:bg-indigo-200 dark:hover:bg-indigo-700 rounded-md transition-colors text-indigo-600 dark:text-indigo-400"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span className="text-xs font-bold w-4 text-center select-none">{weight}</span>
+                                    <button 
+                                      onClick={(e) => updateWeight(item, person, 1, e)}
+                                      className="p-1 hover:bg-indigo-200 dark:hover:bg-indigo-700 rounded-md transition-colors text-indigo-600 dark:text-indigo-400"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                 </div>
+                               )}
                              </div>
                            );
                          })
