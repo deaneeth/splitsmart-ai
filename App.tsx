@@ -5,21 +5,67 @@ import { ReceiptPane } from './components/ReceiptPane';
 import { ChatInterface } from './components/ChatInterface';
 import { Summary } from './components/Summary';
 import { parseReceiptImage, processChatCommand } from './services/geminiService';
-import { Split, Sun, Moon } from 'lucide-react';
+import { Split, Sun, Moon, Trash2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>('upload');
-  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
+  // Initialize state from localStorage if available
+  const [appState, setAppState] = useState<AppState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('splitSmart_appState');
+      // If stuck in analyzing state on reload, reset to upload
+      if (saved === 'analyzing') return 'upload';
+      return (saved as AppState) || 'upload';
+    }
+    return 'upload';
+  });
+
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('splitSmart_receiptData');
+      return saved ? JSON.parse(saved) : null;
+    }
+    return null;
+  });
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('splitSmart_messages');
+      return saved ? JSON.parse(saved) : [
+        {
+          id: 'welcome',
+          role: 'model',
+          text: 'Upload a receipt to get started! I can help you split the bill.',
+          timestamp: Date.now(),
+        },
+      ];
+    }
+    return [{
       id: 'welcome',
       role: 'model',
       text: 'Upload a receipt to get started! I can help you split the bill.',
       timestamp: Date.now(),
-    },
-  ]);
+    }];
+  });
+
   const [isProcessingChat, setIsProcessingChat] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('splitSmart_appState', appState);
+  }, [appState]);
+
+  useEffect(() => {
+    if (receiptData) {
+      localStorage.setItem('splitSmart_receiptData', JSON.stringify(receiptData));
+    } else {
+      localStorage.removeItem('splitSmart_receiptData');
+    }
+  }, [receiptData]);
+
+  useEffect(() => {
+    localStorage.setItem('splitSmart_messages', JSON.stringify(messages));
+  }, [messages]);
 
   // Initialize theme based on system preference or local storage
   useEffect(() => {
@@ -56,8 +102,24 @@ const App: React.FC = () => {
           try {
             const data = await parseReceiptImage(base64);
             setReceiptData(data);
+            
+            // Reset messages for new receipt
+            const newMessages: ChatMessage[] = [
+              {
+                id: 'welcome',
+                role: 'model',
+                text: 'Upload a receipt to get started! I can help you split the bill.',
+                timestamp: Date.now(),
+              },
+              {
+                id: (Date.now() + 1).toString(),
+                role: 'model',
+                text: "I've analyzed the receipt. You can now tell me who had what! (e.g., 'John had the salad')",
+                timestamp: Date.now() + 1,
+              }
+            ];
+            setMessages(newMessages);
             setAppState('splitting');
-            addMessage('model', "I've analyzed the receipt. You can now tell me who had what! (e.g., 'John had the salad')");
           } catch (error) {
             console.error(error);
             addMessage('model', "Sorry, I couldn't analyze that receipt. Please try again.");
@@ -70,6 +132,21 @@ const App: React.FC = () => {
       console.error(error);
       setAppState('upload');
     }
+  };
+
+  const handleResetSession = () => {
+    // Reset without confirmation for immediate action
+    setReceiptData(null);
+    setMessages([{
+      id: 'welcome',
+      role: 'model',
+      text: 'Upload a receipt to get started! I can help you split the bill.',
+      timestamp: Date.now(),
+    }]);
+    setAppState('upload');
+    localStorage.removeItem('splitSmart_receiptData');
+    localStorage.removeItem('splitSmart_messages');
+    localStorage.setItem('splitSmart_appState', 'upload');
   };
 
   const addMessage = (role: 'user' | 'model', text: string) => {
@@ -205,18 +282,30 @@ const App: React.FC = () => {
             SplitSmart<span className="text-indigo-600 dark:text-indigo-400">.ai</span>
           </h1>
         </div>
-        <button 
-          onClick={toggleTheme}
-          className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:bg-indigo-50 dark:hover:bg-gray-700"
-          aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-          title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {darkMode ? (
-            <Sun className="w-5 h-5 transition-transform duration-500 rotate-0 hover:rotate-90" />
-          ) : (
-            <Moon className="w-5 h-5 transition-transform duration-500 rotate-0 hover:-rotate-12" />
+        <div className="flex items-center gap-3">
+          {receiptData && (
+            <button
+              onClick={handleResetSession}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              title="Start Over"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>New Receipt</span>
+            </button>
           )}
-        </button>
+          <button 
+            onClick={toggleTheme}
+            className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:bg-indigo-50 dark:hover:bg-gray-700"
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {darkMode ? (
+              <Sun className="w-5 h-5 transition-transform duration-500 rotate-0 hover:rotate-90" />
+            ) : (
+              <Moon className="w-5 h-5 transition-transform duration-500 rotate-0 hover:-rotate-12" />
+            )}
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 md:p-6 transition-colors duration-300">
