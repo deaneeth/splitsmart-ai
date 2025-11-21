@@ -1,7 +1,8 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import { ReceiptData, PersonTotal } from '../types';
-import { PieChart, Wallet, Copy, Download, Check, Calculator, Percent } from 'lucide-react';
+import { PieChart, Wallet, Copy, Download, Check, Calculator, Percent, Flame, Users, List, Loader2, Sparkles } from 'lucide-react';
+import { generateRoast } from '../services/geminiService';
 
 // Duplicate color logic to avoid circular dependencies or complex imports
 const USER_COLORS = [
@@ -47,6 +48,11 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
   const summaryRef = useRef<HTMLDivElement>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
   const [isDownloading, setIsDownloading] = useState(false);
+  
+  // New Features State
+  const [splitMode, setSplitMode] = useState<'detailed' | 'equal'>('detailed');
+  const [roastText, setRoastText] = useState<string | null>(null);
+  const [isRoasting, setIsRoasting] = useState(false);
 
   const breakdown = useMemo(() => {
     const peopleMap = new Map<string, PersonTotal>();
@@ -120,18 +126,38 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
     };
   }, [data]);
 
+  const equalSplitBreakdown = useMemo(() => {
+    const people = breakdown.people;
+    if (people.length === 0) return [];
+    
+    // Even split of the Grand Total (including tax/tip)
+    const splitAmount = data.total / people.length;
+    
+    return people.map(p => ({
+      ...p,
+      finalTotal: splitAmount,
+      itemsTotal: data.subtotal / people.length, // Approximate
+      taxShare: data.tax / people.length,
+      tipShare: data.tip / people.length,
+      items: ['Equal Split Share']
+    }));
+  }, [breakdown.people, data.total, data.subtotal, data.tax, data.tip]);
+
+  const activeBreakdown = splitMode === 'detailed' ? breakdown.people : equalSplitBreakdown;
+  const activeUnassigned = splitMode === 'detailed' ? breakdown.unassignedTotal : 0;
+
   const handleCopySummary = async () => {
     const lines = [
-      `🧾 Bill Split Summary`,
+      `🧾 Bill Split Summary ${splitMode === 'equal' ? '(Even Split)' : ''}`,
       `----------------`
     ];
     
-    breakdown.people.forEach(p => {
+    activeBreakdown.forEach(p => {
       lines.push(`${p.name}: ${data.currency}${p.finalTotal.toFixed(2)}`);
     });
     
-    if (breakdown.unassignedTotal > 0) {
-      lines.push(`Unassigned: ${data.currency}${breakdown.unassignedTotal.toFixed(2)}`);
+    if (activeUnassigned > 0) {
+      lines.push(`Unassigned: ${data.currency}${activeUnassigned.toFixed(2)}`);
     }
 
     lines.push(`----------------`);
@@ -179,6 +205,19 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
     }
   };
 
+  const handleRoast = async () => {
+    if (isRoasting) return;
+    setIsRoasting(true);
+    try {
+      const text = await generateRoast(data, breakdown);
+      setRoastText(text);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsRoasting(false);
+    }
+  };
+
   const setTipPercentage = (percent: number) => {
     const newTip = data.subtotal * (percent / 100);
     onUpdateTip(Number(newTip.toFixed(2)));
@@ -192,15 +231,44 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
       className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden transition-colors duration-300"
     >
       <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-10 flex justify-between items-center">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
-          <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg mr-2.5">
-            <PieChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+            <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg mr-2.5">
+              <PieChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            Cost
+          </h2>
+          
+          {/* Split Mode Toggle */}
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+             <button 
+               onClick={() => setSplitMode('detailed')}
+               className={`p-1.5 rounded-md transition-all ${splitMode === 'detailed' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+               title="Detailed Split"
+             >
+               <List className="w-4 h-4" />
+             </button>
+             <button 
+               onClick={() => setSplitMode('equal')}
+               className={`p-1.5 rounded-md transition-all ${splitMode === 'equal' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+               title="Equal Split"
+             >
+               <Users className="w-4 h-4" />
+             </button>
           </div>
-          Cost Breakdown
-        </h2>
+        </div>
         
-        {breakdown.people.length > 0 && (
-          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+        {activeBreakdown.length > 0 && (
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
+             <button 
+               onClick={handleRoast}
+               disabled={isRoasting}
+               className={`p-1.5 rounded-md transition-all duration-200 ${roastText ? 'text-orange-500 bg-orange-100 dark:bg-orange-900/30' : 'text-gray-500 hover:text-orange-600 hover:bg-white dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-orange-400'}`}
+               title="Roast Us!"
+             >
+               {isRoasting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}
+             </button>
+             <div className="w-px h-4 bg-gray-300 dark:bg-gray-700 mx-0.5"></div>
              <button 
                onClick={handleCopySummary}
                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-white dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-indigo-400 rounded-md transition-all duration-200"
@@ -222,15 +290,44 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700">
-        {breakdown.people.length === 0 ? (
+        
+        {/* Roast Display */}
+        {roastText && (
+          <div className="mb-6 relative overflow-hidden rounded-xl bg-gradient-to-br from-orange-500 to-pink-600 p-0.5 animate-fade-in-up">
+             <div className="bg-white dark:bg-gray-900 rounded-[10px] p-4 relative">
+                <div className="absolute top-0 right-0 -mt-2 -mr-2 opacity-10 dark:opacity-20">
+                   <Flame className="w-24 h-24" />
+                </div>
+                <div className="flex items-start gap-3 relative z-10">
+                   <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-full shrink-0">
+                      <Sparkles className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                   </div>
+                   <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400 mb-1">AI Roast</h3>
+                      <p className="text-sm text-gray-700 dark:text-gray-200 italic leading-relaxed">
+                         "{roastText}"
+                      </p>
+                   </div>
+                   <button 
+                     onClick={() => setRoastText(null)} 
+                     className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                   >
+                     &times;
+                   </button>
+                </div>
+             </div>
+          </div>
+        )}
+
+        {activeBreakdown.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center p-6 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl">
             <Wallet className="w-12 h-12 text-gray-200 dark:text-gray-700 mb-3" />
             <p className="text-gray-500 dark:text-gray-400 font-medium">No assignments yet</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Use the chat to tell me who paid for what!</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Use the chat or drag friends to items!</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {breakdown.people.map((person) => {
+            {activeBreakdown.map((person) => {
               const color = getUserColor(person.name);
               return (
                 <div key={person.name} className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border border-gray-100 dark:border-gray-800 hover:border-purple-200 dark:hover:border-purple-900/50 transition-colors">
@@ -268,11 +365,11 @@ export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip
           </div>
         )}
 
-        {breakdown.unassignedTotal > 0 && (
+        {activeUnassigned > 0 && (
           <div className="mt-6 p-4 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 rounded-xl">
             <div className="flex justify-between items-center text-orange-800 dark:text-orange-200 font-semibold">
               <span>Unassigned Leftovers</span>
-              <span>{data.currency}{breakdown.unassignedTotal.toFixed(2)}</span>
+              <span>{data.currency}{activeUnassigned.toFixed(2)}</span>
             </div>
             <p className="text-xs text-orange-600 dark:text-orange-400/70 mt-1">
               Tax & Tip for these items are not yet calculated in individual shares.
