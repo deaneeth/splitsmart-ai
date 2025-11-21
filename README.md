@@ -131,4 +131,4 @@ This project is open source and available under the **MIT License**.
 
 ---
 
-*Built with ❤️ and 🤖 by [Your Name]*
+*Built with ❤️ and 🤖 by Deaneeth*
