@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { ReceiptData, AppState, ChatMessage } from './types';
+import { ReceiptData, AppState, ChatMessage, ReceiptItem } from './types';
 import { FileUploader } from './components/FileUploader';
 import { ReceiptPane } from './components/ReceiptPane';
 import { ChatInterface } from './components/ChatInterface';
@@ -118,6 +118,60 @@ const App: React.FC = () => {
     }
   }, [receiptData]);
 
+  // --- Receipt Editing Handlers ---
+
+  const handleAddItem = () => {
+    setReceiptData(prev => {
+      if (!prev) return null;
+      const newItem: ReceiptItem = {
+        id: Date.now() + Math.floor(Math.random() * 10000), // Ensure uniqueness
+        name: "New Item",
+        price: 0,
+        quantity: 1,
+        assignedTo: []
+      };
+      const updatedItems = [newItem, ...prev.items]; // Add to top
+      // Recalculate subtotal + total
+      const newSubtotal = updatedItems.reduce((acc, item) => acc + item.price, 0);
+      return {
+        ...prev,
+        items: updatedItems,
+        subtotal: newSubtotal,
+        total: newSubtotal + prev.tax + prev.tip 
+      };
+    });
+  };
+
+  const handleUpdateItem = (updatedItem: ReceiptItem) => {
+    setReceiptData(prev => {
+      if (!prev) return null;
+      const updatedItems = prev.items.map(item => 
+        item.id === updatedItem.id ? updatedItem : item
+      );
+      const newSubtotal = updatedItems.reduce((acc, item) => acc + item.price, 0);
+      return {
+        ...prev,
+        items: updatedItems,
+        subtotal: newSubtotal,
+        total: newSubtotal + prev.tax + prev.tip
+      };
+    });
+  };
+
+  const handleDeleteItem = (itemId: number) => {
+    setReceiptData(prev => {
+      if (!prev) return null;
+      const updatedItems = prev.items.filter(item => item.id !== itemId);
+      const newSubtotal = updatedItems.reduce((acc, item) => acc + item.price, 0);
+      return {
+        ...prev,
+        items: updatedItems,
+        subtotal: newSubtotal,
+        total: newSubtotal + prev.tax + prev.tip
+      };
+    });
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans">
       <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 py-4 px-6 flex items-center justify-between sticky top-0 z-20 transition-colors duration-300">
@@ -163,7 +217,15 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-7rem)]">
             {/* Left Column: Receipt */}
             <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300">
-              {receiptData && <ReceiptPane items={receiptData.items} currency={receiptData.currency} />}
+              {receiptData && (
+                <ReceiptPane 
+                  items={receiptData.items} 
+                  currency={receiptData.currency}
+                  onAddItem={handleAddItem}
+                  onUpdateItem={handleUpdateItem}
+                  onDeleteItem={handleDeleteItem}
+                />
+              )}
             </div>
 
             {/* Middle Column: Chat */}
