@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ReceiptItem } from '../types';
-import { User, Users, Receipt, Plus, Pencil, Trash2, Check, X, UserPlus, ImagePlus, Loader2 } from 'lucide-react';
+import { User, Users, Receipt, Plus, Pencil, Trash2, Check, X, UserPlus, ImagePlus, Loader2, Camera } from 'lucide-react';
 
 // Color palette for user avatars and tags
 const USER_COLORS = [
@@ -71,14 +72,12 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
     return Array.from(people).sort();
   }, [items]);
 
-  // Focus input when editing starts
   useEffect(() => {
     if (editingId !== null && editInputRef.current) {
       editInputRef.current.focus();
     }
   }, [editingId]);
 
-  // Focus input when assigning starts
   useEffect(() => {
     if (assigningId !== null && assignInputRef.current) {
       assignInputRef.current.focus();
@@ -94,7 +93,7 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
 
   const handleStartAssign = (item: ReceiptItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (editingId !== null) return; // Don't open if editing
+    if (editingId !== null) return;
     setEditingId(null);
     setAssigningId(assigningId === item.id ? null : item.id);
     setNewAssigneeName('');
@@ -137,10 +136,7 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
 
   const handleAddNewAssignee = (item: ReceiptItem) => {
     if (!newAssigneeName.trim()) return;
-    
-    // Capitalize first letter for consistency
     const name = newAssigneeName.trim();
-    
     if (!item.assignedTo.includes(name)) {
       onUpdateItem({
         ...item,
@@ -158,13 +154,22 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
     if (e.target.files && e.target.files[0]) {
       onAddReceipt(e.target.files[0]);
     }
-    // Reset value so same file can be selected again if needed
     if (e.target) e.target.value = '';
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden transition-colors duration-300 relative">
-      <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 backdrop-blur-sm sticky top-0 z-10 flex justify-between items-center">
+    <div className="flex flex-col h-full w-full relative bg-white dark:bg-gray-900">
+      {/* Hidden File Input */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        className="hidden" 
+        accept="image/*" 
+        onChange={handleFileChange} 
+      />
+
+      {/* Header - Static top bar */}
+      <div className="flex-none p-5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex justify-between items-center z-10">
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
             <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg mr-2.5">
@@ -176,14 +181,8 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
             {items.length} items detected
           </p>
         </div>
-        <div className="flex gap-2">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            className="hidden" 
-            accept="image/*" 
-            onChange={handleFileChange} 
-          />
+        {/* Desktop Controls (Hidden on mobile in favor of bottom bar) */}
+        <div className="hidden lg:flex gap-2">
           <button 
             onClick={handleUploadClick}
             disabled={isScanning}
@@ -206,7 +205,8 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700 pb-32">
+      {/* Scrollable List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700">
         {items.map((item) => (
           <div
             key={item.id}
@@ -230,16 +230,16 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                     type="text" 
                     value={editForm.name}
                     onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                    className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-base md:text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     placeholder="Item name"
                   />
-                  <div className="relative w-24">
+                  <div className="relative w-24 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">{currency}</span>
                     <input 
                       type="number" 
                       value={editForm.price}
                       onChange={(e) => setEditForm({...editForm, price: e.target.value})}
-                      className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg pl-6 pr-2 py-1.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg pl-6 pr-2 py-2 text-base md:text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       placeholder="0.00"
                       step="0.01"
                     />
@@ -248,7 +248,7 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                 <div className="flex justify-between items-center">
                   <button 
                     onClick={(e) => handleDelete(item.id, e)}
-                    className="p-1.5 text-white bg-red-500 hover:bg-red-600 rounded-md shadow-sm"
+                    className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-md shadow-sm"
                     title="Delete item"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -256,13 +256,13 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                   <div className="flex gap-2">
                     <button 
                       onClick={handleCancelEdit}
-                      className="p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                      className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
                     >
                       <X className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={() => handleSaveEdit(item)}
-                      className="p-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-md"
+                      className="p-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-md"
                     >
                       <Check className="w-4 h-4" />
                     </button>
@@ -280,28 +280,31 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                     </span>
                     
                     {/* Action Buttons */}
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1 absolute top-2 right-2 md:static md:opacity-0 md:group-hover:opacity-100 bg-white dark:bg-gray-800 md:bg-transparent shadow-sm md:shadow-none rounded-lg p-1 md:p-0 z-10">
+                    <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm md:bg-transparent rounded-lg p-1 md:p-0 z-10">
+                      <button 
+                        onClick={(e) => handleStartEdit(item, e)}
+                        className="md:hidden p-1.5 text-gray-400 hover:text-indigo-600"
+                      >
+                         <Pencil className="w-4 h-4" />
+                      </button>
+
                       <button 
                         onClick={(e) => handleStartAssign(item, e)}
-                        className={`p-1.5 rounded-md transition-colors ${
-                          assigningId === item.id 
-                          ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' 
-                          : 'text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        }`}
+                        className="hidden md:block p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                         title="Assign people"
                       >
                         <UserPlus className="w-3.5 h-3.5" />
                       </button>
                       <button 
                         onClick={(e) => handleStartEdit(item, e)}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                        className="hidden md:block p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                         title="Edit item"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button 
                         onClick={(e) => handleDelete(item.id, e)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                        className="hidden md:block p-1.5 text-gray-400 hover:text-red-600"
                         title="Delete item"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -331,24 +334,17 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                        })}
                      </div>
                    )}
-                   
-                   {item.assignedTo.length > 1 && (
-                      <div className="flex items-center text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-100 dark:border-gray-700">
-                        <Users className="w-3 h-3 mr-1" />
-                        <span>{item.assignedTo.length}</span>
-                      </div>
-                   )}
                 </div>
 
                 {/* POPUP MENU FOR ASSIGNMENT */}
                 {assigningId === item.id && (
                   <div 
-                    className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in-up overflow-hidden"
+                    className="absolute left-0 top-full mt-2 w-full md:w-72 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in-up overflow-hidden"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
                       <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Assign To</span>
-                      <button onClick={() => setAssigningId(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                      <button onClick={() => setAssigningId(null)} className="text-gray-400 hover:text-gray-600">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -362,7 +358,7 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                              <div 
                                key={person}
                                onClick={() => toggleAssignment(item, person)}
-                               className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer text-sm transition-all duration-200 ${
+                               className={`flex items-center justify-between px-3 py-3 rounded-lg cursor-pointer text-sm transition-all duration-200 ${
                                  isAssigned 
                                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-200' 
                                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
@@ -391,13 +387,13 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
                           value={newAssigneeName}
                           onChange={(e) => setNewAssigneeName(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleAddNewAssignee(item)}
-                          placeholder="Add new person..."
-                          className="flex-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-indigo-400/50 transition-all"
+                          placeholder="Add name..."
+                          className="flex-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                         />
                         <button 
                           onClick={() => handleAddNewAssignee(item)}
                           disabled={!newAssigneeName.trim()}
-                          className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                          className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
                         >
                           <Plus className="w-4 h-4" />
                         </button>
@@ -410,11 +406,34 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
           </div>
         ))}
       </div>
+
+      {/* Mobile Static Action Bar - Replaces FABs for better static access */}
+      <div className="lg:hidden flex-none p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex gap-3 z-20">
+        <button
+          onClick={handleUploadClick}
+          disabled={isScanning}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-white dark:bg-gray-800 text-indigo-600 border border-indigo-200 dark:border-gray-700 font-medium hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors shadow-sm disabled:opacity-50"
+        >
+           {isScanning ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Camera className="w-5 h-5" />
+            )}
+            <span>Scan</span>
+        </button>
+        <button
+          onClick={onAddItem}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-500/20"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Add Item</span>
+        </button>
+      </div>
       
-      {/* Overlay to close popover when clicking outside */}
+      {/* Overlay for popover */}
       {assigningId !== null && (
         <div 
-          className="fixed inset-0 z-0 bg-transparent" 
+          className="fixed inset-0 z-0 bg-black/10 backdrop-blur-[1px]" 
           onClick={() => setAssigningId(null)}
         />
       )}

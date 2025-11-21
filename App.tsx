@@ -7,7 +7,9 @@ import { ChatInterface } from './components/ChatInterface';
 import { Summary } from './components/Summary';
 import { Sidebar } from './components/Sidebar';
 import { parseReceiptImage, processChatCommand } from './services/geminiService';
-import { Split, Sun, Moon, Trash2, Menu } from 'lucide-react';
+import { Split, Sun, Moon, Trash2, Menu, LayoutList, MessageSquare, PieChart } from 'lucide-react';
+
+type MobileTab = 'items' | 'chat' | 'summary';
 
 const App: React.FC = () => {
   // --- Session Management & Migration ---
@@ -77,7 +79,6 @@ const App: React.FC = () => {
   });
 
   // --- Application State (Derived from Active Session) ---
-  // We initialize these by reading the active session from LS to prevent flash
   const getInitialSessionData = (): SessionData => {
     const defaultData: SessionData = {
       receiptData: null,
@@ -100,8 +101,6 @@ const App: React.FC = () => {
         return defaultData;
       }
     }
-    
-    // Fallback: If session exists in list but no data (e.g. new session created but not saved yet)
     return defaultData;
   };
 
@@ -116,22 +115,21 @@ const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
-  // Track if we are currently switching sessions to prevent auto-save overwriting
+  // Mobile State
+  const [mobileTab, setMobileTab] = useState<MobileTab>('items');
+  
   const isSwitchingRef = useRef(false);
 
   // --- Persistence Effects ---
 
-  // 1. Save Active Session ID
   useEffect(() => {
     localStorage.setItem('splitSmart_activeSessionId', activeSessionId);
   }, [activeSessionId]);
 
-  // 2. Save Sessions Index
   useEffect(() => {
     localStorage.setItem('splitSmart_sessions', JSON.stringify(sessions));
   }, [sessions]);
 
-  // 3. Auto-save Current Session Data
   useEffect(() => {
     if (!activeSessionId || isSwitchingRef.current) return;
 
@@ -142,7 +140,6 @@ const App: React.FC = () => {
     };
     localStorage.setItem(`splitSmart_session_${activeSessionId}`, JSON.stringify(sessionPayload));
 
-    // Update metadata (Total/Currency) if changed
     setSessions(prev => {
       const session = prev.find(s => s.id === activeSessionId);
       if (session && receiptData && (session.total !== receiptData.total || session.currency !== receiptData.currency)) {
@@ -189,14 +186,13 @@ const App: React.FC = () => {
       currency: '$'
     };
     
-    setSessions(prev => [newSession, ...prev]); // Add to top
+    setSessions(prev => [newSession, ...prev]);
     handleSwitchSession(newId);
   };
 
   const handleSwitchSession = (id: string) => {
     isSwitchingRef.current = true;
     
-    // 1. Load new data
     const stored = localStorage.getItem(`splitSmart_session_${id}`);
     if (stored) {
       const data: SessionData = JSON.parse(stored);
@@ -204,7 +200,6 @@ const App: React.FC = () => {
       setMessages(data.messages);
       setAppState(data.appState);
     } else {
-      // Fresh session
       setReceiptData(null);
       setMessages([{
         id: 'welcome',
@@ -217,8 +212,8 @@ const App: React.FC = () => {
 
     setActiveSessionId(id);
     setIsSidebarOpen(false);
+    setMobileTab('items'); // Reset mobile tab
     
-    // Allow state to settle before enabling auto-save again
     setTimeout(() => {
       isSwitchingRef.current = false;
     }, 100);
@@ -234,7 +229,6 @@ const App: React.FC = () => {
       if (newSessions.length > 0) {
         handleSwitchSession(newSessions[0].id);
       } else {
-        // If deleted last session, create a new empty one
         handleNewSession();
       }
     }
@@ -257,9 +251,6 @@ const App: React.FC = () => {
             const data = await parseReceiptImage(base64);
             setReceiptData(data);
             
-            // Update session name based on date maybe? Or just keep "Receipt N"
-            // Optional: Auto-name session based on first item or something? For now keep generic.
-
             const newMessages: ChatMessage[] = [
               {
                 id: 'welcome',
@@ -276,6 +267,7 @@ const App: React.FC = () => {
             ];
             setMessages(newMessages);
             setAppState('splitting');
+            setMobileTab('items');
           } catch (error) {
             console.error(error);
             addMessage('model', "Sorry, I couldn't analyze that receipt. Please try again.");
@@ -337,7 +329,6 @@ const App: React.FC = () => {
   };
 
   const handleResetSession = () => {
-    // In new model, reset is effectively just clearing the data of current session
     setReceiptData(null);
     setMessages([{
       id: 'welcome',
@@ -364,7 +355,6 @@ const App: React.FC = () => {
     try {
       const result = await processChatCommand(receiptData.items, text);
       
-      // Apply updates
       if (result.updates.length > 0) {
         setReceiptData((prev) => {
           if (!prev) return null;
@@ -395,7 +385,6 @@ const App: React.FC = () => {
   }, [receiptData]);
 
   // --- Item/Tax/Tip Handlers ---
-
   const handleAddItem = () => {
     setReceiptData(prev => {
       if (!prev) return null;
@@ -408,28 +397,16 @@ const App: React.FC = () => {
       };
       const updatedItems = [newItem, ...prev.items];
       const newSubtotal = updatedItems.reduce((acc, item) => acc + item.price, 0);
-      return {
-        ...prev,
-        items: updatedItems,
-        subtotal: newSubtotal,
-        total: newSubtotal + prev.tax + prev.tip 
-      };
+      return { ...prev, items: updatedItems, subtotal: newSubtotal, total: newSubtotal + prev.tax + prev.tip };
     });
   };
 
   const handleUpdateItem = (updatedItem: ReceiptItem) => {
     setReceiptData(prev => {
       if (!prev) return null;
-      const updatedItems = prev.items.map(item => 
-        item.id === updatedItem.id ? updatedItem : item
-      );
+      const updatedItems = prev.items.map(item => item.id === updatedItem.id ? updatedItem : item);
       const newSubtotal = updatedItems.reduce((acc, item) => acc + item.price, 0);
-      return {
-        ...prev,
-        items: updatedItems,
-        subtotal: newSubtotal,
-        total: newSubtotal + prev.tax + prev.tip
-      };
+      return { ...prev, items: updatedItems, subtotal: newSubtotal, total: newSubtotal + prev.tax + prev.tip };
     });
   };
 
@@ -438,39 +415,21 @@ const App: React.FC = () => {
       if (!prev) return null;
       const updatedItems = prev.items.filter(item => item.id !== itemId);
       const newSubtotal = updatedItems.reduce((acc, item) => acc + item.price, 0);
-      return {
-        ...prev,
-        items: updatedItems,
-        subtotal: newSubtotal,
-        total: newSubtotal + prev.tax + prev.tip
-      };
+      return { ...prev, items: updatedItems, subtotal: newSubtotal, total: newSubtotal + prev.tax + prev.tip };
     });
   };
 
   const handleUpdateTax = (newTax: number) => {
-    setReceiptData(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        tax: newTax,
-        total: prev.subtotal + newTax + prev.tip
-      };
-    });
+    setReceiptData(prev => prev ? { ...prev, tax: newTax, total: prev.subtotal + newTax + prev.tip } : null);
   };
 
   const handleUpdateTip = (newTip: number) => {
-    setReceiptData(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        tip: newTip,
-        total: prev.subtotal + prev.tax + newTip
-      };
-    });
+    setReceiptData(prev => prev ? { ...prev, tip: newTip, total: prev.subtotal + prev.tax + newTip } : null);
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans">
+    // Root container with fixed height 100dvh to prevent browser bar scrolling issues
+    <div className="h-[100dvh] flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans overflow-hidden">
       <Sidebar 
         isOpen={isSidebarOpen} 
         onClose={() => setIsSidebarOpen(false)}
@@ -482,8 +441,9 @@ const App: React.FC = () => {
         onRenameSession={handleRenameSession}
       />
 
-      <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 py-4 px-6 flex items-center justify-between sticky top-0 z-20 transition-colors duration-300">
-        <div className="flex items-center gap-4">
+      {/* Header: Fixed height, never scrolls away */}
+      <header className="flex-none h-16 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 flex items-center justify-between z-30 transition-colors duration-300">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsSidebarOpen(true)}
             className="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
@@ -491,18 +451,15 @@ const App: React.FC = () => {
             <Menu className="w-6 h-6" />
           </button>
           <div className="flex items-center group cursor-pointer" onClick={() => setAppState('upload')}>
-            <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl mr-3 shadow-lg shadow-indigo-500/20 transform group-hover:scale-105 transition-transform duration-200">
-                <Split className="w-6 h-6 text-white" />
+            <div className="p-2 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl mr-2 shadow-lg shadow-indigo-500/20">
+                <Split className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 tracking-tight hidden sm:block">
-              SplitSmart<span className="text-indigo-600 dark:text-indigo-400">.ai</span>
-            </h1>
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 tracking-tight sm:hidden">
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 tracking-tight">
               SplitSmart
             </h1>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {receiptData && (
             <button
               onClick={handleResetSession}
@@ -515,38 +472,41 @@ const App: React.FC = () => {
           )}
           <button 
             onClick={toggleTheme}
-            className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:bg-indigo-50 dark:hover:bg-gray-700"
-            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-all duration-200"
           >
-            {darkMode ? (
-              <Sun className="w-5 h-5 transition-transform duration-500 rotate-0 hover:rotate-90" />
-            ) : (
-              <Moon className="w-5 h-5 transition-transform duration-500 rotate-0 hover:-rotate-12" />
-            )}
+            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
         </div>
       </header>
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 md:p-6 transition-colors duration-300">
+      {/* Main Content: Fills remaining vertical space, manages its own scrolling */}
+      <main className="flex-1 overflow-hidden relative flex flex-col">
         {appState === 'upload' || appState === 'analyzing' ? (
-          <div className="max-w-3xl mx-auto mt-16 md:mt-24 px-4 animate-fade-in-up">
-            <div className="text-center mb-12 space-y-4">
-              <h2 className="text-5xl md:text-6xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                Bill splitting, <br/>
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400">reimagined.</span>
-              </h2>
-              <p className="text-xl text-gray-600 dark:text-gray-300 max-w-xl mx-auto leading-relaxed">
-                Upload a receipt, chat with our AI, and split costs in seconds. No more spreadsheets.
-              </p>
-            </div>
-            <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl shadow-indigo-100/50 dark:shadow-none p-2">
-              <FileUploader onFileSelect={handleFileSelect} isAnalyzing={appState === 'analyzing'} />
+          <div className="h-full overflow-y-auto pb-20">
+            <div className="max-w-3xl mx-auto mt-8 md:mt-16 px-4 animate-fade-in-up">
+              <div className="text-center mb-8 space-y-4">
+                <h2 className="text-4xl md:text-6xl font-extrabold text-gray-900 dark:text-white tracking-tight leading-tight">
+                  Split bills, <br/>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">effortlessly.</span>
+                </h2>
+                <p className="text-lg text-gray-600 dark:text-gray-300 max-w-xl mx-auto">
+                  Upload a receipt, tell AI who ordered what, and get the breakdown in seconds.
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl shadow-indigo-100/50 dark:shadow-none p-2">
+                <FileUploader onFileSelect={handleFileSelect} isAnalyzing={appState === 'analyzing'} />
+              </div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-7rem)]">
-            {/* Left Column: Receipt */}
-            <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300">
+          /* Layout Container */
+          <div className="h-full lg:p-6 flex flex-col lg:grid lg:grid-cols-3 gap-6">
+            
+            {/* Desktop: Column 1 / Mobile: Tab 'items' */}
+            <div className={`
+              ${mobileTab === 'items' ? 'flex' : 'hidden'} 
+              lg:flex lg:col-span-1 h-full overflow-hidden flex-col bg-white dark:bg-gray-900 lg:rounded-2xl lg:shadow-sm
+            `}>
               {receiptData && (
                 <ReceiptPane 
                   items={receiptData.items} 
@@ -560,8 +520,11 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* Middle Column: Chat */}
-            <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 order-3 lg:order-2">
+            {/* Desktop: Column 2 / Mobile: Tab 'chat' */}
+            <div className={`
+              ${mobileTab === 'chat' ? 'flex' : 'hidden'} 
+              lg:flex lg:col-span-1 h-full overflow-hidden flex-col bg-white dark:bg-gray-900 lg:rounded-2xl lg:shadow-sm lg:order-2
+            `}>
               <ChatInterface
                 messages={messages}
                 onSendMessage={handleSendMessage}
@@ -569,8 +532,11 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Right Column: Summary */}
-            <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 order-2 lg:order-3">
+            {/* Desktop: Column 3 / Mobile: Tab 'summary' */}
+            <div className={`
+              ${mobileTab === 'summary' ? 'flex' : 'hidden'} 
+              lg:flex lg:col-span-1 h-full overflow-hidden flex-col bg-white dark:bg-gray-900 lg:rounded-2xl lg:shadow-sm lg:order-3
+            `}>
               {receiptData && (
                 <Summary 
                   data={receiptData} 
@@ -582,6 +548,41 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Mobile Bottom Navigation: Fixed height, never overlaps or leaves gaps */}
+      {(appState === 'splitting') && (
+        <nav className="lg:hidden flex-none h-16 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 z-40">
+          <div className="flex justify-around items-center h-full">
+            <button 
+              onClick={() => setMobileTab('items')}
+              className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${
+                mobileTab === 'items' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
+              <LayoutList className="w-6 h-6" />
+              <span className="text-[10px] font-medium">Items</span>
+            </button>
+            <button 
+              onClick={() => setMobileTab('chat')}
+              className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${
+                mobileTab === 'chat' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
+              <MessageSquare className="w-6 h-6" />
+              <span className="text-[10px] font-medium">Chat</span>
+            </button>
+            <button 
+              onClick={() => setMobileTab('summary')}
+              className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${
+                mobileTab === 'summary' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
+              <PieChart className="w-6 h-6" />
+              <span className="text-[10px] font-medium">Split</span>
+            </button>
+          </div>
+        </nav>
+      )}
     </div>
   );
 };
