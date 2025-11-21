@@ -1,12 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ReceiptData, PersonTotal } from '../types';
-import { PieChart, Wallet } from 'lucide-react';
+import { PieChart, Wallet, Copy, Download, Check, Share2 } from 'lucide-react';
 
 interface SummaryProps {
   data: ReceiptData;
 }
 
 export const Summary: React.FC<SummaryProps> = ({ data }) => {
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const breakdown = useMemo(() => {
     const peopleMap = new Map<string, PersonTotal>();
     let unassignedTotal = 0;
@@ -55,15 +59,98 @@ export const Summary: React.FC<SummaryProps> = ({ data }) => {
     return { people: peopleArray, unassignedTotal };
   }, [data]);
 
+  const handleCopySummary = async () => {
+    const lines = [
+      `🧾 Bill Split Summary`,
+      `----------------`
+    ];
+    
+    breakdown.people.forEach(p => {
+      lines.push(`${p.name}: ${data.currency}${p.finalTotal.toFixed(2)}`);
+    });
+    
+    if (breakdown.unassignedTotal > 0) {
+      lines.push(`Unassigned: ${data.currency}${breakdown.unassignedTotal.toFixed(2)}`);
+    }
+
+    lines.push(`----------------`);
+    lines.push(`Total: ${data.currency}${data.total.toFixed(2)}`);
+    
+    const text = lines.join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyStatus('copied');
+      setTimeout(() => setCopyStatus('idle'), 2000);
+    } catch (e) {
+      console.error("Failed to copy", e);
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    if (!summaryRef.current || isDownloading) return;
+    setIsDownloading(true);
+    
+    try {
+      // @ts-ignore
+      if (typeof window.html2canvas === 'undefined') {
+        console.error("html2canvas not loaded");
+        setIsDownloading(false);
+        return;
+      }
+
+      // @ts-ignore
+      const canvas = await window.html2canvas(summaryRef.current, {
+        useCORS: true,
+        scale: 2,
+        backgroundColor: document.documentElement.classList.contains('dark') ? '#111827' : '#ffffff',
+        logging: false
+      });
+      
+      const link = document.createElement('a');
+      link.download = `SplitSmart-Summary-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      console.error("Failed to download image", e);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden transition-colors duration-300">
-      <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-10">
+    <div 
+      ref={summaryRef}
+      className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden transition-colors duration-300"
+    >
+      <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-10 flex justify-between items-center">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
           <div className="p-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg mr-2.5">
             <PieChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
           </div>
           Cost Breakdown
         </h2>
+        
+        {breakdown.people.length > 0 && (
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+             <button 
+               onClick={handleCopySummary}
+               className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-white dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-indigo-400 rounded-md transition-all duration-200"
+               title="Copy summary text"
+             >
+               {copyStatus === 'copied' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+             </button>
+             <div className="w-px h-4 bg-gray-300 dark:bg-gray-700 mx-0.5"></div>
+             <button 
+               onClick={handleDownloadImage}
+               disabled={isDownloading}
+               className={`p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-white dark:hover:bg-gray-700 dark:text-gray-400 dark:hover:text-indigo-400 rounded-md transition-all duration-200 ${isDownloading ? 'opacity-50 cursor-wait' : ''}`}
+               title="Download as image"
+             >
+               <Download className="w-4 h-4" />
+             </button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700">
