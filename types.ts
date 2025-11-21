@@ -1,3 +1,4 @@
+
 export interface ReceiptItem {
   id: number;
   name: string;
@@ -32,3 +33,17 @@ export interface PersonTotal {
 }
 
 export type AppState = 'upload' | 'analyzing' | 'splitting';
+
+export interface SessionMeta {
+  id: string;
+  name: string;
+  date: number;
+  total: number;
+  currency: string;
+}
+
+export interface SessionData {
+  receiptData: ReceiptData | null;
+  messages: ChatMessage[];
+  appState: AppState;
+}

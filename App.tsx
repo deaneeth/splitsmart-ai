@@ -1,74 +1,159 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { ReceiptData, AppState, ChatMessage, ReceiptItem } from './types';
+
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { ReceiptData, AppState, ChatMessage, ReceiptItem, SessionMeta, SessionData } from './types';
 import { FileUploader } from './components/FileUploader';
 import { ReceiptPane } from './components/ReceiptPane';
 import { ChatInterface } from './components/ChatInterface';
 import { Summary } from './components/Summary';
+import { Sidebar } from './components/Sidebar';
 import { parseReceiptImage, processChatCommand } from './services/geminiService';
-import { Split, Sun, Moon, Trash2 } from 'lucide-react';
+import { Split, Sun, Moon, Trash2, Menu } from 'lucide-react';
 
 const App: React.FC = () => {
-  // Initialize state from localStorage if available
-  const [appState, setAppState] = useState<AppState>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('splitSmart_appState');
-      // If stuck in analyzing state on reload, reset to upload
-      if (saved === 'analyzing') return 'upload';
-      return (saved as AppState) || 'upload';
+  // --- Session Management & Migration ---
+  const [sessions, setSessions] = useState<SessionMeta[]>(() => {
+    if (typeof window === 'undefined') return [];
+    
+    const savedSessions = localStorage.getItem('splitSmart_sessions');
+    if (savedSessions) {
+      return JSON.parse(savedSessions);
     }
-    return 'upload';
-  });
 
-  const [receiptData, setReceiptData] = useState<ReceiptData | null>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('splitSmart_receiptData');
-      return saved ? JSON.parse(saved) : null;
+    // Check for legacy data to migrate
+    const oldData = localStorage.getItem('splitSmart_receiptData');
+    if (oldData) {
+      try {
+        const data = JSON.parse(oldData);
+        const id = Date.now().toString();
+        const oldMessages = localStorage.getItem('splitSmart_messages');
+        const oldAppState = localStorage.getItem('splitSmart_appState');
+        
+        // Create payload for the new session structure
+        const sessionData: SessionData = {
+          receiptData: data,
+          messages: oldMessages ? JSON.parse(oldMessages) : [],
+          appState: (oldAppState as AppState) || 'upload'
+        };
+        
+        // Save to new key
+        localStorage.setItem(`splitSmart_session_${id}`, JSON.stringify(sessionData));
+        
+        // Create meta
+        const meta: SessionMeta = {
+          id,
+          name: 'Previous Session',
+          date: Date.now(),
+          total: data.total || 0,
+          currency: data.currency || '$'
+        };
+        
+        // Clean up legacy keys
+        localStorage.removeItem('splitSmart_receiptData');
+        localStorage.removeItem('splitSmart_messages');
+        localStorage.removeItem('splitSmart_appState');
+        
+        return [meta];
+      } catch (e) {
+        console.error("Migration failed", e);
+      }
     }
-    return null;
-  });
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('splitSmart_messages');
-      return saved ? JSON.parse(saved) : [
-        {
-          id: 'welcome',
-          role: 'model',
-          text: 'Upload a receipt to get started! I can help you split the bill.',
-          timestamp: Date.now(),
-        },
-      ];
-    }
-    return [{
-      id: 'welcome',
-      role: 'model',
-      text: 'Upload a receipt to get started! I can help you split the bill.',
-      timestamp: Date.now(),
+    // Default initial session
+    const initialId = Date.now().toString();
+    return [{ 
+      id: initialId, 
+      name: 'New Receipt', 
+      date: Date.now(), 
+      total: 0, 
+      currency: '$' 
     }];
   });
+
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const savedId = localStorage.getItem('splitSmart_activeSessionId');
+    if (savedId && sessions.find(s => s.id === savedId)) return savedId;
+    return sessions.length > 0 ? sessions[0].id : '';
+  });
+
+  // --- Application State (Derived from Active Session) ---
+  // We initialize these by reading the active session from LS to prevent flash
+  const getInitialSessionData = (): SessionData => {
+    const defaultData: SessionData = {
+      receiptData: null,
+      messages: [{
+        id: 'welcome',
+        role: 'model',
+        text: 'Upload a receipt to get started! I can help you split the bill.',
+        timestamp: Date.now(),
+      }],
+      appState: 'upload'
+    };
+    
+    if (!activeSessionId) return defaultData;
+    
+    const stored = localStorage.getItem(`splitSmart_session_${activeSessionId}`);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        return defaultData;
+      }
+    }
+    
+    // Fallback: If session exists in list but no data (e.g. new session created but not saved yet)
+    return defaultData;
+  };
+
+  const initialData = getInitialSessionData();
+
+  const [appState, setAppState] = useState<AppState>(initialData.appState);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(initialData.receiptData);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialData.messages);
 
   const [isProcessingChat, setIsProcessingChat] = useState(false);
   const [isAppending, setIsAppending] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // Track if we are currently switching sessions to prevent auto-save overwriting
+  const isSwitchingRef = useRef(false);
 
-  // Save state to localStorage whenever it changes
+  // --- Persistence Effects ---
+
+  // 1. Save Active Session ID
   useEffect(() => {
-    localStorage.setItem('splitSmart_appState', appState);
-  }, [appState]);
+    localStorage.setItem('splitSmart_activeSessionId', activeSessionId);
+  }, [activeSessionId]);
 
+  // 2. Save Sessions Index
   useEffect(() => {
-    if (receiptData) {
-      localStorage.setItem('splitSmart_receiptData', JSON.stringify(receiptData));
-    } else {
-      localStorage.removeItem('splitSmart_receiptData');
-    }
-  }, [receiptData]);
+    localStorage.setItem('splitSmart_sessions', JSON.stringify(sessions));
+  }, [sessions]);
 
+  // 3. Auto-save Current Session Data
   useEffect(() => {
-    localStorage.setItem('splitSmart_messages', JSON.stringify(messages));
-  }, [messages]);
+    if (!activeSessionId || isSwitchingRef.current) return;
 
-  // Initialize theme based on system preference or local storage
+    const sessionPayload: SessionData = {
+      receiptData,
+      messages,
+      appState
+    };
+    localStorage.setItem(`splitSmart_session_${activeSessionId}`, JSON.stringify(sessionPayload));
+
+    // Update metadata (Total/Currency) if changed
+    setSessions(prev => {
+      const session = prev.find(s => s.id === activeSessionId);
+      if (session && receiptData && (session.total !== receiptData.total || session.currency !== receiptData.currency)) {
+        return prev.map(s => s.id === activeSessionId ? { ...s, total: receiptData.total, currency: receiptData.currency } : s);
+      }
+      return prev;
+    });
+
+  }, [receiptData, messages, appState, activeSessionId]);
+
+  // --- Theme Management ---
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -78,7 +163,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Apply theme class to document and save to local storage
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -93,6 +177,75 @@ const App: React.FC = () => {
     setDarkMode(!darkMode);
   };
 
+  // --- Session Actions ---
+
+  const handleNewSession = () => {
+    const newId = Date.now().toString();
+    const newSession: SessionMeta = {
+      id: newId,
+      name: `Receipt ${sessions.length + 1}`,
+      date: Date.now(),
+      total: 0,
+      currency: '$'
+    };
+    
+    setSessions(prev => [newSession, ...prev]); // Add to top
+    handleSwitchSession(newId);
+  };
+
+  const handleSwitchSession = (id: string) => {
+    isSwitchingRef.current = true;
+    
+    // 1. Load new data
+    const stored = localStorage.getItem(`splitSmart_session_${id}`);
+    if (stored) {
+      const data: SessionData = JSON.parse(stored);
+      setReceiptData(data.receiptData);
+      setMessages(data.messages);
+      setAppState(data.appState);
+    } else {
+      // Fresh session
+      setReceiptData(null);
+      setMessages([{
+        id: 'welcome',
+        role: 'model',
+        text: 'Upload a receipt to get started! I can help you split the bill.',
+        timestamp: Date.now(),
+      }]);
+      setAppState('upload');
+    }
+
+    setActiveSessionId(id);
+    setIsSidebarOpen(false);
+    
+    // Allow state to settle before enabling auto-save again
+    setTimeout(() => {
+      isSwitchingRef.current = false;
+    }, 100);
+  };
+
+  const handleDeleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSessions = sessions.filter(s => s.id !== id);
+    setSessions(newSessions);
+    localStorage.removeItem(`splitSmart_session_${id}`);
+
+    if (activeSessionId === id) {
+      if (newSessions.length > 0) {
+        handleSwitchSession(newSessions[0].id);
+      } else {
+        // If deleted last session, create a new empty one
+        handleNewSession();
+      }
+    }
+  };
+
+  const handleRenameSession = (id: string, newName: string) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
+  };
+
+  // --- Core Features ---
+
   const handleFileSelect = async (file: File) => {
     setAppState('analyzing');
     try {
@@ -104,7 +257,9 @@ const App: React.FC = () => {
             const data = await parseReceiptImage(base64);
             setReceiptData(data);
             
-            // Reset messages for new receipt
+            // Update session name based on date maybe? Or just keep "Receipt N"
+            // Optional: Auto-name session based on first item or something? For now keep generic.
+
             const newMessages: ChatMessage[] = [
               {
                 id: 'welcome',
@@ -182,7 +337,7 @@ const App: React.FC = () => {
   };
 
   const handleResetSession = () => {
-    // Reset without confirmation for immediate action
+    // In new model, reset is effectively just clearing the data of current session
     setReceiptData(null);
     setMessages([{
       id: 'welcome',
@@ -191,9 +346,6 @@ const App: React.FC = () => {
       timestamp: Date.now(),
     }]);
     setAppState('upload');
-    localStorage.removeItem('splitSmart_receiptData');
-    localStorage.removeItem('splitSmart_messages');
-    localStorage.setItem('splitSmart_appState', 'upload');
   };
 
   const addMessage = (role: 'user' | 'model', text: string) => {
@@ -242,20 +394,19 @@ const App: React.FC = () => {
     }
   }, [receiptData]);
 
-  // --- Receipt Editing Handlers ---
+  // --- Item/Tax/Tip Handlers ---
 
   const handleAddItem = () => {
     setReceiptData(prev => {
       if (!prev) return null;
       const newItem: ReceiptItem = {
-        id: Date.now() + Math.floor(Math.random() * 10000), // Ensure uniqueness
+        id: Date.now() + Math.floor(Math.random() * 10000),
         name: "New Item",
         price: 0,
         quantity: 1,
         assignedTo: []
       };
-      const updatedItems = [newItem, ...prev.items]; // Add to top
-      // Recalculate subtotal + total
+      const updatedItems = [newItem, ...prev.items];
       const newSubtotal = updatedItems.reduce((acc, item) => acc + item.price, 0);
       return {
         ...prev,
@@ -320,31 +471,52 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans">
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSwitchSession={handleSwitchSession}
+        onNewSession={handleNewSession}
+        onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
+      />
+
       <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 py-4 px-6 flex items-center justify-between sticky top-0 z-20 transition-colors duration-300">
-        <div className="flex items-center group cursor-pointer" onClick={() => setAppState('upload')}>
-          <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl mr-3 shadow-lg shadow-indigo-500/20 transform group-hover:scale-105 transition-transform duration-200">
-              <Split className="w-6 h-6 text-white" />
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <div className="flex items-center group cursor-pointer" onClick={() => setAppState('upload')}>
+            <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl mr-3 shadow-lg shadow-indigo-500/20 transform group-hover:scale-105 transition-transform duration-200">
+                <Split className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 tracking-tight hidden sm:block">
+              SplitSmart<span className="text-indigo-600 dark:text-indigo-400">.ai</span>
+            </h1>
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 tracking-tight sm:hidden">
+              SplitSmart
+            </h1>
           </div>
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 tracking-tight">
-            SplitSmart<span className="text-indigo-600 dark:text-indigo-400">.ai</span>
-          </h1>
         </div>
         <div className="flex items-center gap-3">
           {receiptData && (
             <button
               onClick={handleResetSession}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-              title="Start Over"
+              className="hidden md:flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              title="Clear Current Receipt"
             >
               <Trash2 className="w-4 h-4" />
-              <span>New Receipt</span>
+              <span>Clear</span>
             </button>
           )}
           <button 
             onClick={toggleTheme}
             className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:bg-indigo-50 dark:hover:bg-gray-700"
             aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
           >
             {darkMode ? (
               <Sun className="w-5 h-5 transition-transform duration-500 rotate-0 hover:rotate-90" />
@@ -389,7 +561,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Middle Column: Chat */}
-            <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300">
+            <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 order-3 lg:order-2">
               <ChatInterface
                 messages={messages}
                 onSendMessage={handleSendMessage}
@@ -398,7 +570,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Right Column: Summary */}
-            <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300">
+            <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 order-2 lg:order-3">
               {receiptData && (
                 <Summary 
                   data={receiptData} 
