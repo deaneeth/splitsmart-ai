@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ReceiptData, ReceiptItem } from "../types";
 
@@ -18,6 +19,11 @@ export const parseReceiptImage = async (base64Image: string): Promise<ReceiptDat
             name: { type: Type.STRING },
             price: { type: Type.NUMBER, description: "Total price for this line item (unit price * quantity)" },
             quantity: { type: Type.NUMBER, description: "Quantity of the item, default to 1" },
+            box_2d: { 
+              type: Type.ARRAY, 
+              items: { type: Type.NUMBER },
+              description: "Bounding box [ymin, xmin, ymax, xmax] in 1000x1000 normalized coordinates." 
+            }
           },
           required: ["name", "price"],
         },
@@ -42,14 +48,14 @@ export const parseReceiptImage = async (base64Image: string): Promise<ReceiptDat
           },
         },
         {
-          text: "Analyze this receipt. Extract all items, their prices, tax, tip, and the total. If tax or tip is not explicitly listed, set them to 0. Ensure prices are numbers."
+          text: "Analyze this receipt. Extract all items, their prices, tax, tip, and the total. If tax or tip is not explicitly listed, set them to 0. Ensure prices are numbers. Also identify the bounding box for each item."
         },
       ],
     },
     config: {
       responseMimeType: "application/json",
       responseSchema: responseSchema,
-      systemInstruction: "You are an expert receipt parser. Precision is key.",
+      systemInstruction: "You are an expert receipt parser. Precision is key. Locate items on the image.",
     },
   });
 
@@ -68,12 +74,66 @@ export const parseReceiptImage = async (base64Image: string): Promise<ReceiptDat
 
   return {
     items: itemsWithIds,
-    subtotal: data.subtotal || itemsWithIds.reduce((acc, curr) => acc + curr.price, 0),
+    subtotal: data.subtotal || itemsWithIds.reduce((acc: number, curr: ReceiptItem) => acc + curr.price, 0),
     tax: data.tax || 0,
     tip: data.tip || 0,
     total: data.total || 0,
     currency: data.currency || '$',
+    imageUrl: base64Image, // Store the image for overlays
   };
+};
+
+export const identifyDietaryRestrictions = async (items: ReceiptItem[]): Promise<{id: number, tags: string[]}[]> => {
+  const modelId = 'gemini-2.5-flash';
+  
+  const itemNames = items.map(i => ({ id: i.id, name: i.name }));
+  
+  const prompt = `
+    Analyze these food items and identify dietary tags.
+    Tags to look for: "Vegan", "Gluten-Free", "Spicy", "Alcohol", "Nuts", "Dairy".
+    Return a JSON list of objects with 'id' and 'tags'.
+    Items: ${JSON.stringify(itemNames)}
+  `;
+
+  const response = await ai.models.generateContent({
+    model: modelId,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+    }
+  });
+
+  const text = response.text;
+  if (!text) return [];
+  
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("Dietary analysis failed", e);
+    return [];
+  }
+};
+
+export const generateRoast = async (receiptData: ReceiptData, breakdown: any): Promise<string> => {
+  const modelId = 'gemini-3-pro-preview';
+  
+  const prompt = `
+    Here is a bill breakdown:
+    ${JSON.stringify(breakdown)}
+    
+    The total bill was ${receiptData.currency}${receiptData.total}.
+    
+    Generate a funny, short "roast" of the group's spending habits. 
+    Make fun of who spent the most, or specific expensive items, or if someone only bought salad while others drank alcohol. 
+    Keep it lighthearted and under 50 words.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: modelId,
+    contents: prompt,
+  });
+
+  return response.text || "Wow, big spenders!";
 };
 
 export interface ChatActionResponse {

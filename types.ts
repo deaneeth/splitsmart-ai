@@ -6,6 +6,8 @@ export interface ReceiptItem {
   quantity: number;
   assignedTo: string[]; // List of names sharing this item
   assignmentWeights?: Record<string, number>; // Map of name -> share count (default 1)
+  dietaryTags?: string[]; // e.g. 'vegan', 'gluten-free'
+  box_2d?: number[]; // [ymin, xmin, ymax, xmax] 1000x1000 normalized
 }
 
 export interface ReceiptData {
@@ -15,6 +17,7 @@ export interface ReceiptData {
   tip: number;
   total: number;
   currency: string;
+  imageUrl?: string; // Base64 string of the original receipt
 }
 
 export interface ChatMessage {
