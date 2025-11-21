@@ -172,6 +172,28 @@ const App: React.FC = () => {
     });
   };
 
+  const handleUpdateTax = (newTax: number) => {
+    setReceiptData(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        tax: newTax,
+        total: prev.subtotal + newTax + prev.tip
+      };
+    });
+  };
+
+  const handleUpdateTip = (newTip: number) => {
+    setReceiptData(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        tip: newTip,
+        total: prev.subtotal + prev.tax + newTip
+      };
+    });
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans">
       <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 py-4 px-6 flex items-center justify-between sticky top-0 z-20 transition-colors duration-300">
@@ -239,7 +261,13 @@ const App: React.FC = () => {
 
             {/* Right Column: Summary */}
             <div className="lg:col-span-1 h-full overflow-hidden flex flex-col rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300">
-              {receiptData && <Summary data={receiptData} />}
+              {receiptData && (
+                <Summary 
+                  data={receiptData} 
+                  onUpdateTax={handleUpdateTax}
+                  onUpdateTip={handleUpdateTip}
+                />
+              )}
             </div>
           </div>
         )}

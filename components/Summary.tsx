@@ -1,12 +1,14 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { ReceiptData, PersonTotal } from '../types';
-import { PieChart, Wallet, Copy, Download, Check, Share2 } from 'lucide-react';
+import { PieChart, Wallet, Copy, Download, Check, Calculator, Percent } from 'lucide-react';
 
 interface SummaryProps {
   data: ReceiptData;
+  onUpdateTax: (amount: number) => void;
+  onUpdateTip: (amount: number) => void;
 }
 
-export const Summary: React.FC<SummaryProps> = ({ data }) => {
+export const Summary: React.FC<SummaryProps> = ({ data, onUpdateTax, onUpdateTip }) => {
   const summaryRef = useRef<HTMLDivElement>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -118,6 +120,13 @@ export const Summary: React.FC<SummaryProps> = ({ data }) => {
     }
   };
 
+  const setTipPercentage = (percent: number) => {
+    const newTip = data.subtotal * (percent / 100);
+    onUpdateTip(Number(newTip.toFixed(2)));
+  };
+
+  const currentTipPercentage = data.subtotal > 0 ? Math.round((data.tip / data.subtotal) * 100) : 0;
+
   return (
     <div 
       ref={summaryRef}
@@ -205,13 +214,75 @@ export const Summary: React.FC<SummaryProps> = ({ data }) => {
         )}
       </div>
 
-      <div className="p-5 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
-         <div className="flex justify-between items-end">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Receipt</p>
-              <p className="text-xs text-gray-400 dark:text-gray-600">Inc. Tax & Tip</p>
+      <div className="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
+         {/* Adjustments Section */}
+         <div className="p-5 pb-2 space-y-4 border-b border-gray-100 dark:border-gray-800/50">
+            {/* Tax Row */}
+            <div className="flex items-center justify-between gap-4">
+               <div className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400">
+                  <div className="p-1 bg-gray-200 dark:bg-gray-800 rounded">
+                    <Calculator className="w-3.5 h-3.5" />
+                  </div>
+                  Tax
+               </div>
+               <div className="relative w-28">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">{data.currency}</span>
+                  <input 
+                    type="number" 
+                    value={data.tax}
+                    onChange={(e) => onUpdateTax(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-7 pr-3 py-1.5 text-sm text-right text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                    step="0.01"
+                  />
+               </div>
             </div>
-            <span className="text-3xl font-bold text-gray-900 dark:text-white">{data.currency}{data.total.toFixed(2)}</span>
+
+            {/* Tip Row */}
+            <div className="space-y-2">
+               <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400">
+                      <div className="p-1 bg-gray-200 dark:bg-gray-800 rounded">
+                        <Percent className="w-3.5 h-3.5" />
+                      </div>
+                      Tip
+                  </div>
+                  <div className="relative w-28">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">{data.currency}</span>
+                      <input 
+                        type="number" 
+                        value={data.tip}
+                        onChange={(e) => onUpdateTip(parseFloat(e.target.value) || 0)}
+                        className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-7 pr-3 py-1.5 text-sm text-right text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                        step="0.01"
+                      />
+                  </div>
+               </div>
+               <div className="flex justify-end gap-1.5 flex-wrap">
+                  {[0, 10, 15, 18, 20].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => setTipPercentage(pct)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                        currentTipPercentage === pct 
+                          ? 'bg-indigo-600 text-white' 
+                          : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+               </div>
+            </div>
+         </div>
+
+         <div className="p-5 pt-4">
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Receipt</p>
+                <p className="text-xs text-gray-400 dark:text-gray-600">Inc. Tax & Tip</p>
+              </div>
+              <span className="text-3xl font-bold text-gray-900 dark:text-white">{data.currency}{data.total.toFixed(2)}</span>
+            </div>
          </div>
       </div>
     </div>
