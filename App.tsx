@@ -48,6 +48,7 @@ const App: React.FC = () => {
   });
 
   const [isProcessingChat, setIsProcessingChat] = useState(false);
+  const [isAppending, setIsAppending] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
   // Save state to localStorage whenever it changes
@@ -131,6 +132,52 @@ const App: React.FC = () => {
     } catch (error) {
       console.error(error);
       setAppState('upload');
+    }
+  };
+
+  const handleAppendReceipt = async (file: File) => {
+    setIsAppending(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        if (base64) {
+          try {
+            const newData = await parseReceiptImage(base64);
+            
+            setReceiptData(prev => {
+              if (!prev) return newData;
+              
+              const maxId = prev.items.reduce((max, item) => Math.max(max, item.id), 0);
+              const newItemsWithIds = newData.items.map((item, index) => ({
+                ...item,
+                id: maxId + index + 1
+              }));
+
+              return {
+                ...prev,
+                items: [...prev.items, ...newItemsWithIds],
+                subtotal: prev.subtotal + newData.subtotal,
+                tax: prev.tax + newData.tax,
+                tip: prev.tip + newData.tip,
+                total: prev.total + newData.total
+              };
+            });
+            
+            addMessage('model', `I've added ${newData.items.length} items from the new receipt to your list.`);
+          } catch (error) {
+            console.error(error);
+            addMessage('model', "Sorry, I couldn't analyze the additional receipt. Please try again.");
+          } finally {
+            setIsAppending(false);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error(error);
+      setIsAppending(false);
+      addMessage('model', "Sorry, I encountered an error processing the file.");
     }
   };
 
@@ -335,6 +382,8 @@ const App: React.FC = () => {
                   onAddItem={handleAddItem}
                   onUpdateItem={handleUpdateItem}
                   onDeleteItem={handleDeleteItem}
+                  onAddReceipt={handleAppendReceipt}
+                  isScanning={isAppending}
                 />
               )}
             </div>

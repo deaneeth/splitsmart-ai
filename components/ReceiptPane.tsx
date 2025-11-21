@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ReceiptItem } from '../types';
-import { User, Users, Receipt, Plus, Pencil, Trash2, Check, X, UserPlus } from 'lucide-react';
+import { User, Users, Receipt, Plus, Pencil, Trash2, Check, X, UserPlus, ImagePlus, Loader2 } from 'lucide-react';
 
 interface ReceiptPaneProps {
   items: ReceiptItem[];
@@ -8,6 +8,8 @@ interface ReceiptPaneProps {
   onAddItem: () => void;
   onUpdateItem: (item: ReceiptItem) => void;
   onDeleteItem: (id: number) => void;
+  onAddReceipt: (file: File) => void;
+  isScanning: boolean;
 }
 
 export const ReceiptPane: React.FC<ReceiptPaneProps> = ({ 
@@ -15,7 +17,9 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
   currency, 
   onAddItem, 
   onUpdateItem, 
-  onDeleteItem 
+  onDeleteItem,
+  onAddReceipt,
+  isScanning
 }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [assigningId, setAssigningId] = useState<number | null>(null);
@@ -24,6 +28,7 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
   
   const editInputRef = useRef<HTMLInputElement>(null);
   const assignInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Derive a list of all unique people currently assigned to any item
   const allParticipants = useMemo(() => {
@@ -111,6 +116,18 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
     setNewAssigneeName('');
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      onAddReceipt(e.target.files[0]);
+    }
+    // Reset value so same file can be selected again if needed
+    if (e.target) e.target.value = '';
+  };
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden transition-colors duration-300 relative">
       <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 backdrop-blur-sm sticky top-0 z-10 flex justify-between items-center">
@@ -125,13 +142,34 @@ export const ReceiptPane: React.FC<ReceiptPaneProps> = ({
             {items.length} items detected
           </p>
         </div>
-        <button 
-          onClick={onAddItem}
-          className="p-2 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-gray-600 dark:text-gray-300 hover:text-emerald-700 dark:hover:text-emerald-400 rounded-lg transition-colors"
-          title="Add new item"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
+        <div className="flex gap-2">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            className="hidden" 
+            accept="image/*" 
+            onChange={handleFileChange} 
+          />
+          <button 
+            onClick={handleUploadClick}
+            disabled={isScanning}
+            className="p-2 bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-600 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Scan another receipt"
+          >
+            {isScanning ? (
+              <Loader2 className="w-5 h-5 animate-spin text-blue-600 dark:text-blue-400" />
+            ) : (
+              <ImagePlus className="w-5 h-5" />
+            )}
+          </button>
+          <button 
+            onClick={onAddItem}
+            className="p-2 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-gray-600 dark:text-gray-300 hover:text-emerald-700 dark:hover:text-emerald-400 rounded-lg transition-colors"
+            title="Add new item"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700 pb-32">
